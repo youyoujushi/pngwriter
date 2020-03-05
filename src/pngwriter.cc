@@ -889,7 +889,7 @@ void pngwriter::close()
    png_structp     png_ptr;
    png_infop       info_ptr;
 
-   fp = fopen(filename_.c_str(), "wb");
+   fp = fopen(filename_.c_str(), "wb+");
    if( fp == NULL)
      {
 	std::cerr << " PNGwriter::close - ERROR **: Error creating file (fopen() returned NULL pointer)." << std::endl;
@@ -970,6 +970,19 @@ void pngwriter::close()
    png_write_image(png_ptr, graph_);
    png_write_end(png_ptr, info_ptr);
    png_destroy_write_struct(&png_ptr, &info_ptr);
+
+  // std::string test("test.png");
+  //  FILE            *fp2 = fopen(test.c_str(), "wb");
+  //  fseek(fp,0,SEEK_END);
+  //  int len = ftell(fp);
+  //  fseek(fp,0,SEEK_SET);
+  //  char* buf = new char[len];
+  //  size_t s = fread(buf,1,len,fp);
+  //  printf("read %d size,error:%d\n",s,ferror(fp));
+  //  s = fwrite(buf,1,len,fp2);
+  //  printf("write %d size\n",s);
+  //  fclose(fp2);
+
    fclose(fp);
 }
 

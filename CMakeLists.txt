@@ -70,7 +70,7 @@ endif()
 
 # Targets #####################################################################
 #
-add_library(PNGwriter
+add_library(PNGwriter SHARED
     src/pngwriter.cc
     src/pngwriter.h
 )

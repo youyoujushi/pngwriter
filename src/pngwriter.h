@@ -47,6 +47,8 @@
 #define PNGWRITER_VERSION_MINOR 7
 #define PNGWRITER_VERSION_PATCH 0
 
+#define NO_FREETYPE
+
 /* deprecated old define in style MAJOR.MINORREVISION, e.g., 0.56 for 0.5.6 */
 #define PNGWRITER_PASTE(x,y,z) x ## . ## y ## z
 #define PNGWRITER_EVALUATE(x,y,z) PNGWRITER_PASTE(x,y,z)
