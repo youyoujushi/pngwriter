@@ -436,6 +436,18 @@ class pngwriter
     */
    void write_png(void);
 
+   /* generate a png file data in memory
+    * @param   png_data    接收png图片数据地址，png内存需要调用者负责调用delete释放
+    * @param   png_size    接收png图片大小   
+    */
+   void generate_png(char** png_data ,size_t& png_size);
+
+   /* generate a png file data in memory，and save to file
+    * @param   png_data    接收png图片数据地址，png内存需要调用者负责调用delete释放
+    * @param   png_size    接收png图片大小   
+    */
+   void generate_png_and_save_file(char** png_data ,size_t& png_size);
+
    /* Plot Text
     * Uses the Freetype2 library to set text in the image. face_path is the file path to a
     * TrueType font file (.ttf) (FreeType2 can also handle other types). fontsize specifices the approximate

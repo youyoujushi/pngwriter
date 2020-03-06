@@ -885,103 +885,25 @@ void pngwriter::settext(const char * title, const char * author, const char * de
 ///////////////////////////////////////////////////////
 void pngwriter::close()
 {
-   FILE            *fp;
-   png_structp     png_ptr;
-   png_infop       info_ptr;
+  FILE            *fp;
+  png_structp     png_ptr;
+  png_infop       info_ptr;
 
-   fp = fopen(filename_.c_str(), "wb+");
-   if( fp == NULL)
-     {
-	std::cerr << " PNGwriter::close - ERROR **: Error creating file (fopen() returned NULL pointer)." << std::endl;
-	perror(" PNGwriter::close - ERROR **");
-	return;
-     }
+  fp = fopen(filename_.c_str(), "wb+");
+  if( fp == NULL)
+  {
+    std::cerr << " PNGwriter::close - ERROR **: Error creating file (fopen() returned NULL pointer)." << std::endl;
+    perror(" PNGwriter::close - ERROR **");
+    return;
+  }
 
-   png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-   info_ptr = png_create_info_struct(png_ptr);
-   png_init_io(png_ptr, fp);
-   if(compressionlevel_ != -2)
-     {
-	png_set_compression_level(png_ptr, compressionlevel_);
-     }
-   else
-     {
-	png_set_compression_level(png_ptr, PNGWRITER_DEFAULT_COMPRESSION);
-     }
-
-   png_set_IHDR(png_ptr, info_ptr, width_, height_,
-		bit_depth_, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE,
-		PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
-
-   if(filegamma_ < 1.0e-1)
-     {
-	filegamma_ = 0.5;  // Modified in 0.5.4 so as to be the same as the usual gamma.
-     }
-
-   png_set_gAMA(png_ptr, info_ptr, filegamma_);
-
-   time_t          gmt;
-   png_time        mod_time;
-   png_text        text_ptr[5];
-   int             entries = 4;
-   time(&gmt);
-   png_convert_from_time_t(&mod_time, gmt);
-   png_set_tIME(png_ptr, info_ptr, &mod_time);
-   /* key is a 1-79 character description of type char*
-    *
-    * attention: the pointer of `c_str()` could be invalid if a non const
-    * operation to `key_title` is called
-    */
-   std::string key_title("Title");
-   text_ptr[0].key = const_cast<char*>(key_title.c_str());
-   text_ptr[0].text = const_cast<char*>(texttitle_.c_str());
-   text_ptr[0].compression = PNG_TEXT_COMPRESSION_NONE;
-   std::string key_author("Author");
-   text_ptr[1].key = const_cast<char*>(key_author.c_str());
-   text_ptr[1].text = const_cast<char*>(textauthor_.c_str());
-   text_ptr[1].compression = PNG_TEXT_COMPRESSION_NONE;
-   std::string key_descr("Description");
-   text_ptr[2].key = const_cast<char*>(key_descr.c_str());
-   text_ptr[2].text = const_cast<char *>(textdescription_.c_str());
-   text_ptr[2].compression = PNG_TEXT_COMPRESSION_NONE;
-   std::string key_software("Software");
-   text_ptr[3].key = const_cast<char*>(key_software.c_str());
-   text_ptr[3].text = const_cast<char*>(textsoftware_.c_str());
-   text_ptr[3].compression = PNG_TEXT_COMPRESSION_NONE;
-#if defined(PNG_TIME_RFC1123_SUPPORTED)
-   char key_create[] = "Creation Time";
-   text_ptr[4].key = key_create;
-   char textcrtime[29] = "tIME chunk is not present...";
-#if (PNG_LIBPNG_VER < 10600)
-   memcpy(textcrtime,
-          png_convert_to_rfc1123(png_ptr, &mod_time),
-          29);
-#else
-   png_convert_to_rfc1123_buffer(textcrtime, &mod_time);
-#endif
-   textcrtime[sizeof(textcrtime) - 1] = '\0';
-   text_ptr[4].text = textcrtime;
-   text_ptr[4].compression = PNG_TEXT_COMPRESSION_NONE;
-   entries++;
-#endif
-   png_set_text(png_ptr, info_ptr, text_ptr, entries);
-
-   png_write_info(png_ptr, info_ptr);
-   png_write_image(png_ptr, graph_);
-   png_write_end(png_ptr, info_ptr);
-   png_destroy_write_struct(&png_ptr, &info_ptr);
-
-  // std::string test("test.png");
-  //  FILE            *fp2 = fopen(test.c_str(), "wb");
-  //  fseek(fp,0,SEEK_END);
-  //  int len = ftell(fp);
-  //  fseek(fp,0,SEEK_SET);
-  //  char* buf = new char[len];
-  //  size_t s = fread(buf,1,len,fp);
-  //  printf("read %d size,error:%d\n",s,ferror(fp));
-  //  s = fwrite(buf,1,len,fp2);
-  //  printf("write %d size\n",s);
-  //  fclose(fp2);
+  char *png_data = nullptr;
+  size_t png_size = 0;
+  generate_png(&png_data,png_size);
+  if(png_data != nullptr && png_size > 0){
+    fwrite(png_data,png_size,1,fp);
+    delete png_data;
+  }
 
    fclose(fp);
 }
@@ -1902,6 +1824,147 @@ double pngwriter::version(void)
 void pngwriter::write_png(void)
 {
    this->close();
+}
+
+typedef struct _png_mem_encode {
+    char *buffer;
+    size_t size;
+} png_mem_encode ;
+
+/** {{{ dcode_png_writer()
+ * function is custom png_write callback function
+ * Return void */
+static void dcode_png_writer(png_structp png_ptr, png_bytep data, png_size_t length)
+{
+    png_mem_encode* p = (png_mem_encode*) png_get_io_ptr(png_ptr);
+    size_t nsize = p->size + length;
+
+    if (p->buffer){
+      char *temp = new char[nsize];
+      memcpy(temp,p->buffer,p->size);
+      delete []p->buffer;
+      p->buffer = temp;
+    }else
+        p->buffer = new char[nsize];
+
+    if (!p->buffer)
+    {
+        png_error(png_ptr, "PNG allocate memory error");
+        return;
+    }
+
+    memcpy(p->buffer + p->size, data, length);
+    p->size += length;
+}
+
+
+void pngwriter::generate_png(char** png_data ,size_t& png_size){
+
+    png_structp     png_ptr;
+    png_infop       info_ptr;
+
+    png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    info_ptr = png_create_info_struct(png_ptr);
+    
+    png_mem_encode state = {NULL, 0};
+    png_set_write_fn(png_ptr, &state, &dcode_png_writer, NULL);
+
+    if(compressionlevel_ != -2)
+    {
+      png_set_compression_level(png_ptr, compressionlevel_);
+    }
+    else
+    {
+      png_set_compression_level(png_ptr, PNGWRITER_DEFAULT_COMPRESSION);
+    }
+
+    png_set_IHDR(png_ptr, info_ptr, width_, height_,
+    bit_depth_, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE,
+    PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+
+    if(filegamma_ < 1.0e-1)
+    {
+      filegamma_ = 0.5;  // Modified in 0.5.4 so as to be the same as the usual gamma.
+    }
+
+    png_set_gAMA(png_ptr, info_ptr, filegamma_);
+
+    time_t          gmt;
+    png_time        mod_time;
+    png_text        text_ptr[5];
+    int             entries = 4;
+    time(&gmt);
+    png_convert_from_time_t(&mod_time, gmt);
+    png_set_tIME(png_ptr, info_ptr, &mod_time);
+    /* key is a 1-79 character description of type char*
+    *
+    * attention: the pointer of `c_str()` could be invalid if a non const
+    * operation to `key_title` is called
+    */
+    std::string key_title("Title");
+    text_ptr[0].key = const_cast<char*>(key_title.c_str());
+    text_ptr[0].text = const_cast<char*>(texttitle_.c_str());
+    text_ptr[0].compression = PNG_TEXT_COMPRESSION_NONE;
+    std::string key_author("Author");
+    text_ptr[1].key = const_cast<char*>(key_author.c_str());
+    text_ptr[1].text = const_cast<char*>(textauthor_.c_str());
+    text_ptr[1].compression = PNG_TEXT_COMPRESSION_NONE;
+    std::string key_descr("Description");
+    text_ptr[2].key = const_cast<char*>(key_descr.c_str());
+    text_ptr[2].text = const_cast<char *>(textdescription_.c_str());
+    text_ptr[2].compression = PNG_TEXT_COMPRESSION_NONE;
+    std::string key_software("Software");
+    text_ptr[3].key = const_cast<char*>(key_software.c_str());
+    text_ptr[3].text = const_cast<char*>(textsoftware_.c_str());
+    text_ptr[3].compression = PNG_TEXT_COMPRESSION_NONE;
+  #if defined(PNG_TIME_RFC1123_SUPPORTED)
+    char key_create[] = "Creation Time";
+    text_ptr[4].key = key_create;
+    char textcrtime[29] = "tIME chunk is not present...";
+  #if (PNG_LIBPNG_VER < 10600)
+    memcpy(textcrtime,
+          png_convert_to_rfc1123(png_ptr, &mod_time),
+          29);
+  #else
+    png_convert_to_rfc1123_buffer(textcrtime, &mod_time);
+  #endif
+    textcrtime[sizeof(textcrtime) - 1] = '\0';
+    text_ptr[4].text = textcrtime;
+    text_ptr[4].compression = PNG_TEXT_COMPRESSION_NONE;
+    entries++;
+  #endif
+    png_set_text(png_ptr, info_ptr, text_ptr, entries);
+
+    png_write_info(png_ptr, info_ptr);
+    png_write_image(png_ptr, graph_);
+    png_write_end(png_ptr, info_ptr);
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+
+    *png_data = state.buffer;
+    png_size = state.size;
+
+}
+
+
+void pngwriter::generate_png_and_save_file(char** png_data ,size_t& png_size){
+
+    FILE            *fp;
+
+    fp = fopen(filename_.c_str(), "wb");
+    if( fp == NULL)
+    {
+      std::cerr << " PNGwriter::close - ERROR **: Error creating file (fopen() returned NULL pointer)." << std::endl;
+      perror(" PNGwriter::close - ERROR **");
+      return;
+    }
+
+    generate_png(png_data,png_size);
+    if(*png_data != nullptr && png_size > 0){
+      fwrite(*png_data,png_size,1,fp);
+    }
+
+    fclose(fp);
+
 }
 
 #ifndef NO_FREETYPE
